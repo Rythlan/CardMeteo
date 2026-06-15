@@ -59,50 +59,41 @@ void updateTrend(float current_slp)
 {
     if (telemetry.slp_history == 0.0f)
     {
+        telemetry.slp_history = current_slp;
         telemetry.trendStartTime = millis();
+        telemetry.trendTimer = millis();
+        telemetry.pressure_trend = 0;
+        return;
     }
 
-    if (millis() - telemetry.trendTimer > 300000UL || telemetry.slp_history == 0.0f)
+    if (millis() - telemetry.trendTimer > 300000UL)
     {
-        if (telemetry.slp_history != 0.0f)
+        float diff = current_slp - telemetry.slp_history;
+        int old_trend = telemetry.pressure_trend;
+
+        unsigned long elapsed = millis() - telemetry.trendStartTime;
+        float threshold;
+        if (elapsed < 600000UL)
+            threshold = 1.5f;
+        else if (elapsed < 1800000UL)
+            threshold = 1.0f;
+        else if (elapsed < 3600000UL)
+            threshold = 0.7f;
+        else
+            threshold = 0.5f;
+
+        telemetry.pressure_trend = (diff >= threshold) ? 1 : (diff <= -threshold) ? -1
+                                                                                  : 0;
+
+        if (telemetry.pressure_trend != old_trend && telemetry.pressure_trend != 0)
+            playTone(telemetry.pressure_trend);
+
+        if (elapsed > 7200000UL)
         {
-            float diff = current_slp - telemetry.slp_history;
-            int old_trend = telemetry.pressure_trend;
-
-            unsigned long elapsed = millis() - telemetry.trendStartTime;
-            float threshold;
-            if (elapsed < 600000UL)
-                threshold = 2.0f;
-            else if (elapsed < 1800000UL)
-                threshold = 1.5f;
-            else if (elapsed < 3600000UL)
-                threshold = 1.0f;
-            else
-                threshold = 0.7f;
-
-            telemetry.pressure_trend = (diff >= threshold) ? 1 : (diff <= -threshold) ? -1
-                                                                                      : 0;
-
-            if (telemetry.pressure_trend != 0)
-            {
-                if (telemetry.trend_consistent == telemetry.pressure_trend)
-                    telemetry.trend_samples++;
-                else
-                    telemetry.trend_consistent = telemetry.trend_samples = telemetry.pressure_trend;
-                if (elapsed < 600000UL)
-                    telemetry.trend_samples = 0;
-                else if (telemetry.trend_samples >= 2)
-                    telemetry.trend_ready = true;
-            }
-            else
-            {
-                telemetry.trend_consistent = telemetry.trend_samples = 0;
-                telemetry.trend_ready = false;
-            }
-            if (telemetry.pressure_trend != old_trend && telemetry.pressure_trend != 0)
-                playTone(telemetry.pressure_trend);
+            telemetry.slp_history = current_slp;
+            telemetry.trendStartTime = millis();
         }
-        telemetry.slp_history = current_slp;
+
         telemetry.trendTimer = millis();
     }
 }
