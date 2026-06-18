@@ -1,4 +1,5 @@
 #include "common.h"
+#include "esp32-hal-cpu.h"
 
 // --- Sensor Instances ---
 Adafruit_AHTX0 aht;
@@ -52,8 +53,11 @@ void saveSettings()
     prefs.putFloat("alt", config.altitude);
     prefs.putInt("intvl", config.update_interval);
     prefs.putBool("snd", config.sound_enabled);
+    prefs.putBool("prs", config.show_pressure);
     prefs.putInt("brt", config.screen_brightness);
     prefs.putInt("dimto", config.auto_dim_timeout);
+    prefs.putBool("sdlog", config.sd_logging);
+    prefs.putInt("cpu", config.cpu_freq);
     prefs.end();
     state.settings_dirty = false;
 }
@@ -68,6 +72,18 @@ void loadSettings()
     state.current_theme = prefs.getInt("thm", 0);
     config.screen_brightness = prefs.getInt("brt", 255);
     config.auto_dim_timeout = prefs.getInt("dimto", 30);
+    config.sd_logging = prefs.getBool("sdlog", false);
+    config.cpu_freq = prefs.getInt("cpu", 0);
+    prefs.end();
+}
+
+// Apply the configured CPU frequency. Auto mode underclocks to 80 MHz while
+// dimmed (battery) and returns to 240 MHz when awake
+void applyCpuFrequency(bool dimmed)
+{
+    int target = (config.cpu_freq != 0) ? config.cpu_freq : (dimmed ? 80 : 240);
+    if ((int)getCpuFrequencyMhz() != target)
+        setCpuFrequencyMhz((uint32_t)target);
 }
 
 void initSensors()
@@ -85,7 +101,8 @@ void initSensors()
     if (bmp.begin(0x77))
     {
         bmp_found = true;
-        bmp.setSampling(Adafruit_BMP280::MODE_NORMAL,
+        // FORCED mode: one measurement on demand, sleep in between (low power).
+        bmp.setSampling(Adafruit_BMP280::MODE_FORCED,
                         Adafruit_BMP280::SAMPLING_X1, Adafruit_BMP280::SAMPLING_X4,
                         Adafruit_BMP280::FILTER_X16, Adafruit_BMP280::STANDBY_MS_1000);
     }
@@ -100,6 +117,7 @@ static void handleGlobalKeys()
     {
         state.is_dimmed = !state.is_dimmed;
         M5Cardputer.Display.setBrightness(state.is_dimmed ? 0 : config.screen_brightness);
+        applyCpuFrequency(state.is_dimmed);
         config.auto_dimmed = false;
         config.last_keypress_time = millis();
     }
@@ -110,6 +128,17 @@ static void handleGlobalKeys()
             playTone(0);
             state.redraw = true;
         }
+    if (state.current_window != 2)
+    {
+        if (M5Cardputer.Keyboard.isKeyPressed('t') || M5Cardputer.Keyboard.isKeyPressed('T'))
+        {
+            state.current_window = (state.current_window == 3) ? 0 : 3;
+            playTone(0);
+            state.redraw = true;
+        }
+        if (M5Cardputer.Keyboard.isKeyPressed('l') || M5Cardputer.Keyboard.isKeyPressed('L'))
+            toggleSDLogging();
+    }
 }
 
 static void handleDashboardKeys()
@@ -126,18 +155,24 @@ static void handleForecastKeys()
         state.current_window = 0;
 }
 
+static void handleStatsKeys()
+{
+    if (M5Cardputer.Keyboard.isKeyPressed(' ') || M5Cardputer.Keyboard.isKeyPressed('\r'))
+        state.current_window = 0;
+}
+
 static void handleSettingsKeys()
 {
     bool navD = M5Cardputer.Keyboard.isKeyPressed('s') || M5Cardputer.Keyboard.isKeyPressed('S') || M5Cardputer.Keyboard.isKeyPressed('.');
     bool navU = M5Cardputer.Keyboard.isKeyPressed('e') || M5Cardputer.Keyboard.isKeyPressed('E') || M5Cardputer.Keyboard.isKeyPressed(';');
     if (navD)
     {
-        state.settings_cursor = (state.settings_cursor + 1) % 5;
+        state.settings_cursor = (state.settings_cursor + 1) % 6;
         state.redraw = true;
     }
     if (navU)
     {
-        state.settings_cursor = (state.settings_cursor > 0) ? state.settings_cursor - 1 : 4;
+        state.settings_cursor = (state.settings_cursor > 0) ? state.settings_cursor - 1 : 5;
         state.redraw = true;
     }
     bool aP = M5Cardputer.Keyboard.isKeyPressed('a') || M5Cardputer.Keyboard.isKeyPressed('A') || M5Cardputer.Keyboard.isKeyPressed(',');
@@ -165,6 +200,23 @@ static void handleSettingsKeys()
         case 4:
             config.auto_dim_timeout = constrain(config.auto_dim_timeout + step * 5, 5, 120);
             break;
+        case 5:
+            // Cycle: Auto(0) -> 240 -> 160 -> 80 -> Auto.
+            {
+                static const int opts[] = {0, 240, 160, 80};
+                const int nopts = 4;
+                int idx = 0;
+                for (int i = 0; i < nopts; i++)
+                    if (opts[i] == config.cpu_freq)
+                    {
+                        idx = i;
+                        break;
+                    }
+                idx = (idx + step + nopts) % nopts;
+                config.cpu_freq = opts[idx];
+                applyCpuFrequency(config.auto_dimmed);
+            }
+            break;
         }
         state.settings_dirty = true;
         state.redraw = true;
@@ -184,6 +236,7 @@ void handleKeyboard()
         {
             config.auto_dimmed = false;
             M5Cardputer.Display.setBrightness(config.screen_brightness);
+            applyCpuFrequency(false);
             state.redraw = true;
         }
         handleGlobalKeys();
@@ -193,6 +246,8 @@ void handleKeyboard()
             handleForecastKeys();
         else if (state.current_window == 2)
             handleSettingsKeys();
+        else if (state.current_window == 3)
+            handleStatsKeys();
     }
     state.wasPressed = isPressed;
 }
@@ -207,6 +262,7 @@ void setup()
     M5Cardputer.Display.setBrightness(config.screen_brightness);
     initSensors();
     telemetry.trendStartTime = millis();
+    applyCpuFrequency(false);
 }
 
 void loop()
@@ -228,6 +284,7 @@ void loop()
         {
             M5Cardputer.Display.setBrightness(0);
             config.auto_dimmed = true;
+            applyCpuFrequency(true);
             state.redraw = true;
         }
     }
@@ -237,7 +294,9 @@ void loop()
         readSensors();
         if (bmp_found)
             updateTrend(telemetry.slp);
-        if (state.current_window != 2)
+        logToSD();
+        // Skip redraws while the screen is dimmed
+        if (!config.auto_dimmed && state.current_window != 2)
             state.redraw = true;
     }
     if (state.redraw)
@@ -248,8 +307,11 @@ void loop()
             drawForecast();
         else if (state.current_window == 2)
             drawSettings();
+        else if (state.current_window == 3)
+            drawStats();
         canvas.pushSprite(0, 0);
         state.redraw = false;
     }
-    delay(10);
+    // Longer sleep while dimmed: fewer wake-ups
+    delay(config.auto_dimmed ? 150 : 10);
 }

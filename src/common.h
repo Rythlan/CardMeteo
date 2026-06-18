@@ -8,6 +8,8 @@
 #include <Preferences.h>
 #include <Arduino.h>
 
+#define SD_LOG_INTERVAL_MIN 10
+
 // --- Hardware Instances ---
 extern Adafruit_AHTX0 aht;
 extern Adafruit_BMP280 bmp;
@@ -32,6 +34,11 @@ struct DeviceConfig
     int auto_dim_timeout = 60;
     unsigned long last_keypress_time = 0;
     bool auto_dimmed = false;
+    // Optional SD card CSV logging (off by default).
+    bool sd_logging = false;
+    unsigned long last_sd_log = 0;
+    // CPU frequency: 0 = Auto (240 awake / 80 dimmed), else fixed 240/160/80.
+    int cpu_freq = 0;
 };
 extern DeviceConfig config;
 
@@ -64,6 +71,19 @@ struct Telemetry
     int trend_consistent = 0;
     unsigned long trendTimer = 0;
     unsigned long trendStartTime = 0;
+
+    // --- Pressure history ring buffer for rate-of-change & stats ---
+    // One sample every 5 minutes, ~3 hours of history.
+    static const int HISTORY_SIZE = 36;
+    float slp_buf[HISTORY_SIZE] = {0.0f};
+    unsigned long slp_time[HISTORY_SIZE] = {0UL};
+    int hist_head = 0;
+    int hist_count = 0;
+    float slp_rate = 0.0f; // hPa / hour (least-squares slope)
+    float slp_min = 0.0f;
+    float slp_max = 0.0f;
+    float slp_avg = 0.0f;
+    int zambretti = -1; // Zambretti code 0..26 (higher = worse)
 };
 extern Telemetry telemetry;
 
@@ -77,17 +97,24 @@ extern Theme themes[5];
 void playTone(int type);
 void saveSettings();
 void loadSettings();
+void toggleSDLogging();
+void applyCpuFrequency(bool dimmed);
 const char *predictWeather(float current_slp, int trend);
+int computeZambretti(float slp, int trend, float rate3h);
+const char *zambrettiLabel(int z);
 void initSensors();
 
 void drawHeader(const char *title);
 void drawFooter(const char *hint);
 void drawDashboard();
 void drawForecast();
+void drawStats();
 void drawSettings();
 
 void readSensors();
 void updateTrend(float current_slp);
+void updateHistory(float current_slp);
+void logToSD();
 
 void handleKeyboard();
 
