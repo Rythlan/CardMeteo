@@ -5,7 +5,6 @@
 #include <Wire.h>
 #include <Adafruit_AHTX0.h>
 #include <Adafruit_BMP280.h>
-#include <Preferences.h>
 #include <Arduino.h>
 
 #define SD_LOG_INTERVAL_MIN 10
@@ -13,7 +12,6 @@
 // --- Hardware Instances ---
 extern Adafruit_AHTX0 aht;
 extern Adafruit_BMP280 bmp;
-extern Preferences prefs;
 extern M5Canvas canvas;
 
 // --- Sensor Status ---
@@ -39,6 +37,17 @@ struct DeviceConfig
     unsigned long last_sd_log = 0;
     // CPU frequency: 0 = Auto (240 awake / 80 dimmed), else fixed 240/160/80.
     int cpu_freq = 0;
+
+    // --- Advanced Settings ---
+    int volume = 128;
+    float temp_offset = 0.0f;
+    float hum_offset = 0.0f;
+    float press_offset = 0.0f;
+    bool alerts_enabled = false;
+    float temp_high_thresh = 35.0f;
+    float temp_low_thresh = 0.0f;
+    float hum_high_thresh = 80.0f;
+    float hum_low_thresh = 20.0f;
 };
 extern DeviceConfig config;
 
@@ -50,8 +59,13 @@ struct DisplayState
     bool is_dimmed = false;
     int current_theme = 0;
     int settings_cursor = 0;
+    int adv_settings_cursor = 0;
     bool wasPressed = false;
     bool settings_dirty = false;
+
+    // Alert state tracking (prevents beeping every loop)
+    bool prev_t_alert = false;
+    bool prev_h_alert = false;
 };
 extern DisplayState state;
 
@@ -110,8 +124,10 @@ void drawDashboard();
 void drawForecast();
 void drawStats();
 void drawSettings();
+void drawAdvancedSettings();
 
 void readSensors();
+void checkAlerts();
 void updateTrend(float current_slp);
 void updateHistory(float current_slp);
 void logToSD();
