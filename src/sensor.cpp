@@ -1,25 +1,4 @@
 #include "common.h"
-#include <SPI.h>
-#include <SD.h>
-
-static SPIClass sdSPI(HSPI);
-static bool sd_inited = false;
-static bool sd_available = false;
-
-void toggleSDLogging()
-{
-    config.sd_logging = !config.sd_logging;
-    prefs.begin("weather_app", false);
-    prefs.putBool("sdlog", config.sd_logging);
-    prefs.end();
-    if (!config.sd_logging)
-    {
-        sd_inited = false;
-        sd_available = false;
-    }
-    playTone(config.sd_logging ? 1 : -1);
-    state.redraw = true;
-}
 
 // --- Zambretti-style forecaster (pressure + 3h tendency only) ---
 // Returns a code 0..26 where higher values mean worse weather.
@@ -227,39 +206,4 @@ void updateTrend(float current_slp)
                                            telemetry.slp_rate * 3.0f);
 }
 
-void logToSD()
-{
-    if (!config.sd_logging)
-        return;
 
-    unsigned long interval = (unsigned long)SD_LOG_INTERVAL_MIN * 60UL * 1000UL;
-    if (config.last_sd_log != 0 && (millis() - config.last_sd_log) < interval)
-        return;
-    config.last_sd_log = millis();
-
-    if (!sd_inited)
-    {
-        sdSPI.begin(40, 39, 14, 12); // SCK, MISO, MOSI, CS (Cardputer SD slot)
-        sd_available = SD.begin(12, sdSPI, 25000000);
-        sd_inited = true;
-    }
-    if (!sd_available)
-        return;
-
-    File f = SD.open("/meteo.csv", FILE_APPEND);
-    if (!f)
-        return;
-
-    if (f.size() == 0)
-        f.println("uptime_ms,temp_c,humidity,pressure_hpa,slp_hpa,trend,rate_hpa_h,bat_pct");
-
-    int mv = M5Cardputer.Power.getBatteryVoltage();
-    int bat = map(constrain(mv, 3300, 4200), 3300, 4200, 0, 100);
-    char row[112];
-    snprintf(row, sizeof(row), "%lu,%.2f,%.2f,%.2f,%.2f,%d,%.3f,%d",
-             millis(), telemetry.temperature, telemetry.humidity,
-             telemetry.pressure, telemetry.slp, telemetry.pressure_trend,
-             telemetry.slp_rate, bat);
-    f.println(row);
-    f.close();
-}

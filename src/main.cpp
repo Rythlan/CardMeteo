@@ -4,7 +4,6 @@
 // --- Sensor Instances ---
 Adafruit_AHTX0 aht;
 Adafruit_BMP280 bmp;
-Preferences prefs;
 M5Canvas canvas(&M5Cardputer.Display);
 
 // --- Sensor Status ---
@@ -45,36 +44,6 @@ void playTone(int type)
     {
         M5Cardputer.Speaker.tone(2000, 50);
     }
-}
-
-void saveSettings()
-{
-    prefs.begin("weather_app", false);
-    prefs.putFloat("alt", config.altitude);
-    prefs.putInt("intvl", config.update_interval);
-    prefs.putBool("snd", config.sound_enabled);
-    prefs.putBool("prs", config.show_pressure);
-    prefs.putInt("brt", config.screen_brightness);
-    prefs.putInt("dimto", config.auto_dim_timeout);
-    prefs.putBool("sdlog", config.sd_logging);
-    prefs.putInt("cpu", config.cpu_freq);
-    prefs.end();
-    state.settings_dirty = false;
-}
-
-void loadSettings()
-{
-    prefs.begin("weather_app", true);
-    config.altitude = prefs.getFloat("alt", 100.0f);
-    config.update_interval = prefs.getInt("intvl", 1);
-    config.sound_enabled = prefs.getBool("snd", false);
-    config.show_pressure = prefs.getBool("prs", true);
-    state.current_theme = prefs.getInt("thm", 0);
-    config.screen_brightness = prefs.getInt("brt", 255);
-    config.auto_dim_timeout = prefs.getInt("dimto", 30);
-    config.sd_logging = prefs.getBool("sdlog", false);
-    config.cpu_freq = prefs.getInt("cpu", 0);
-    prefs.end();
 }
 
 // Apply the configured CPU frequency. Auto mode underclocks to 80 MHz while
