@@ -24,11 +24,13 @@ VDD  ─────────────────────────
 
 | Key | Action |
 |-----|--------|
-| **Space / Enter** | Switch between Dashboard and Forecast |
+| **Space / Enter** | Dashboard ↔ Forecast ↔ Stats (context back) |
+| **T** | Toggle Stats window |
 | **P** | Toggle pressure box on dashboard |
-| **M** | Open/close settings (hold to save & exit) |
-| **E / S / ↑ / ↓** | Navigate settings menu (up / down) |
-| **A / D / ← / →** | Decrease / increase value |
+| **L** | Toggle optional SD card CSV logging |
+| **M** | Open/close settings (save & exit on close) |
+| **E / S** (or `;` / `.`) | Navigate settings menu (up / down) |
+| **A / D** (or `,` / `/`) | Decrease / increase value |
 | **1–5** | Switch theme (Default, Hacker, Ocean, Sunset, Light) |
 | **0** | Toggle instant dim (absolute black) |
 | **Esc / \`** | Restart (exit to M5Launcher) |
@@ -37,10 +39,15 @@ VDD  ─────────────────────────
 
 - **Dashboard**: Temperature, humidity, local pressure (toggle with P)
 - **Forecast**: Sea-level pressure, weather prediction with adaptive trend detection
-  - Pressure trend uses 5-min intervals with adaptive thresholds (2.0 hPa → 0.7 hPa)
-  - Shows elapsed collection time and confidence (collecting → potential → confirmed)
-- **Settings**: Altitude, update interval, sound alerts, brightness, auto-dim timeout
-- **Auto-dim**: Screen blanks after timeout of inactivity (skips when in settings)
+  - Pressure trend uses 5-min intervals with adaptive thresholds (1.5 hPa → 0.5 hPa)
+  - 3-hour pressure history ring buffer with least-squares rate (hPa/h)
+  - Zambretti forecaster (pressure + 3h tendency) shown in Stats
+  - Confidence: collecting → potential → confirmed
+- **Stats (T)**: Rate of change, Zambretti code, min/max/avg pressure, trend, live CPU MHz, battery
+- **Settings**: Altitude, update interval, sound, brightness, auto-dim timeout, CPU frequency
+- **Auto-dim**: Screen blanks after inactivity; in Auto CPU underclocks to 80 MHz while dimmed (skips when in settings)
+- **SD logging (L)**: Optional CSV log to `/meteo.csv`, one row every 10 min. Off by default, no SD card needed
+- **Battery friendly**: BMP280 runs in FORCED mode (sleeps between reads); longer loop delay while dimmed
 - **5 themes**: Color schemes with header/box/text colors
 
 ## On Device
